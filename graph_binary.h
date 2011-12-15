@@ -35,49 +35,49 @@ using namespace std;
 
 class Graph {
  public:
-  int nb_nodes;
-  int nb_links;
-  int total_weight;  
+  unsigned int nb_nodes;
+  unsigned long nb_links;
+  double total_weight;  
 
-  int *degrees;
-  int *links;
-  int *weights;
+  vector<unsigned long> degrees;
+  vector<unsigned int> links;
+  vector<float> weights;
 
   Graph();
 
   // binary file format is
   // 4 bytes for the number of nodes in the graph
-  // 4*(nb_nodes) bytes for the cumulative degree for each node:
+  // 8*(nb_nodes) bytes for the cumulative degree for each node:
   //    deg(0)=degrees[0]
   //    deg(k)=degrees[k]-degrees[k-1]
   // 4*(sum_degrees) bytes for the links
-  // IF WEIGHTED 4*(sum_degrees) bytes for the weights
-  Graph(char *filename, int type);
+  // IF WEIGHTED 4*(sum_degrees) bytes for the weights in a separate file
+  Graph(char *filename, char *filename_w, int type);
   
-  Graph(int nb_nodes, int nb_links, int total_weight, int *degrees, int *links, int *weights);
-  
-  Graph(int n1, int k1, int n2, int k2, int n3, int k3);
-  Graph(int n1, int k1, int n2, int k2);
-  
+  Graph(int nb_nodes, int nb_links, double total_weight, int *degrees, int *links, float *weights);
+
   void display(void);
+  void display_reverse(void);
   void display_binary(char *outfile);
+  bool check_symmetry();
+
 
   // return the number of neighbors (degree) of the node
-  inline int nb_neighbors(int node);
+  inline unsigned int nb_neighbors(unsigned int node);
 
   // return the number of self loops of the node
-  inline int nb_selfloops(int node);
+  inline double nb_selfloops(unsigned int node);
 
   // return the weighted degree of the node
-  inline int weighted_degree(int node);
+  inline double weighted_degree(unsigned int node);
 
   // return pointers to the first neighbor and first weight of the node
-  inline pair<int *, int *> neighbors(int node);
+  inline pair<vector<unsigned int>::iterator, vector<float>::iterator > neighbors(unsigned int node);
 };
 
 
-inline int
-Graph::nb_neighbors(int node) {
+inline unsigned int
+Graph::nb_neighbors(unsigned int node) {
   assert(node>=0 && node<nb_nodes);
 
   if (node==0)
@@ -86,47 +86,48 @@ Graph::nb_neighbors(int node) {
     return degrees[node]-degrees[node-1];
 }
 
-inline int
-Graph::nb_selfloops(int node) {
+inline double
+Graph::nb_selfloops(unsigned int node) {
   assert(node>=0 && node<nb_nodes);
 
-  pair<int *,int *> p = neighbors(node);
-  for (int i=0 ; i<nb_neighbors(node) ; i++) {
+  pair<vector<unsigned int>::iterator, vector<float>::iterator > p = neighbors(node);
+  for (unsigned int i=0 ; i<nb_neighbors(node) ; i++) {
     if (*(p.first+i)==node) {
-      if (weights!=NULL)
-	return *(p.second+i);
+      if (weights.size()!=0)
+	return (double)*(p.second+i);
       else 
-	return 1;
+	return 1.;
     }
   }
-  return 0;
+  return 0.;
 }
 
-inline int
-Graph::weighted_degree(int node) {
-   assert(node>=0 && node<nb_nodes);
+inline double
+Graph::weighted_degree(unsigned int node) {
+  assert(node>=0 && node<nb_nodes);
 
-   pair<int *,int *> p = neighbors(node);
-   if (p.second==NULL)
-     return nb_neighbors(node);
-   else {
-     int res = 0;
-     for (int i=0 ; i<nb_neighbors(node) ; i++)
-       res += *(p.second+i);
-     return res;
-   }
+  if (weights.size()==0)
+    return (double)nb_neighbors(node);
+  else {
+    pair<vector<unsigned int>::iterator, vector<float>::iterator > p = neighbors(node);
+    double res = 0;
+    for (unsigned int i=0 ; i<nb_neighbors(node) ; i++) {
+      res += (double)*(p.second+i);
+    }
+    return res;
+  }
 }
 
-inline pair<int *,int *>
-Graph::neighbors(int node) {
+inline pair<vector<unsigned int>::iterator, vector<float>::iterator >
+Graph::neighbors(unsigned int node) {
   assert(node>=0 && node<nb_nodes);
 
   if (node==0)
-    return make_pair(links, weights);
-  else if (weights!=NULL)
-    return make_pair(links+(long)degrees[node-1], weights+(long)degrees[node-1]);
+    return make_pair(links.begin(), weights.begin());
+  else if (weights.size()!=0)
+    return make_pair(links.begin()+degrees[node-1], weights.begin()+degrees[node-1]);
   else
-    return make_pair(links+(long)degrees[node-1], weights);
+    return make_pair(links.begin()+degrees[node-1], weights.begin());
 }
 
 

@@ -31,17 +31,14 @@ using namespace std;
 
 class Community {
  public:
-  // network to compute communities for
-  Graph g;
+  vector<double> neigh_weight;
+  vector<unsigned int> neigh_pos;
+  unsigned int neigh_last;
 
-  // nummber of nodes in the network and size of all vectors
-  int size;
-
-  // community to which each node belongs
-  vector<int> n2c;
-
-  // used to compute the modularity participation of each community
-  vector<int> in,tot;
+  Graph g; // network to compute communities for
+  int size; // nummber of nodes in the network and size of all vectors
+  vector<int> n2c; // community to which each node belongs
+  vector<double> in,tot; // used to compute the modularity participation of each community
 
   // number of pass for one level computation
   // if -1, compute as many pass as needed to increase modularity
@@ -52,22 +49,24 @@ class Community {
   // if 0. even a minor increase is enough to go for one more pass
   double min_modularity;
 
-
   // constructors:
   // reads graph from file using graph constructor
   // type defined the weighted/unweighted status of the graph file
-  Community (char *filename, int type, int nb_pass, double min_modularity);
+  Community (char *filename, char *filename_w, int type, int nb_pass, double min_modularity);
   // copy graph
   Community (Graph g, int nb_pass, double min_modularity);
+
+  // initiliazes the partition with something else than all nodes alone
+  void init_partition(char *filename_part);
 
   // display the community of each node
   void display();
 
   // remove the node from its current community with which it has dnodecomm links
-  inline void remove(int node, int comm, int dnodecomm);
+  inline void remove(int node, int comm, double dnodecomm);
 
   // insert the node in comm with which it shares dnodecomm links
-  inline void insert(int node, int comm, int dnodecomm);
+  inline void insert(int node, int comm, double dnodecomm);
 
   // compute the gain of modularity if node where inserted in comm
   // given that node has dnodecomm links to comm.  The formula is:
@@ -78,11 +77,11 @@ class Community {
   //       d(node,com) = number of links from node to comm
   //       deg(node)   = node degree
   //       m           = number of links
-  inline double modularity_gain(int node, int comm, int dnodecomm);
+  inline double modularity_gain(int node, int comm, double dnodecomm, double w_degree);
 
   // compute the set of neighboring communities of node
   // for each community, gives the number of links from node to comm
-  map<int,int> neigh_comm(int node);
+  void neigh_comm(unsigned int node);
 
   // compute the modularity of the current partition
   double modularity();
@@ -96,12 +95,12 @@ class Community {
   Graph partition2graph_binary();
 
   // compute communities of the graph for one level
-  // return the modularity
-  double one_level();
+  // return true if some nodes have been moved
+  bool one_level();
 };
 
 inline void
-Community::remove(int node, int comm, int dnodecomm) {
+Community::remove(int node, int comm, double dnodecomm) {
   assert(node>=0 && node<size);
 
   tot[comm] -= g.weighted_degree(node);
@@ -110,7 +109,7 @@ Community::remove(int node, int comm, int dnodecomm) {
 }
 
 inline void
-Community::insert(int node, int comm, int dnodecomm) {
+Community::insert(int node, int comm, double dnodecomm) {
   assert(node>=0 && node<size);
 
   tot[comm] += g.weighted_degree(node);
@@ -119,15 +118,15 @@ Community::insert(int node, int comm, int dnodecomm) {
 }
 
 inline double
-Community::modularity_gain(int node, int comm, int dnodecomm) {
+Community::modularity_gain(int node, int comm, double dnodecomm, double w_degree) {
   assert(node>=0 && node<size);
 
   double totc = (double)tot[comm];
-  double degc = (double)g.weighted_degree(node);
+  double degc = (double)w_degree;
   double m2   = (double)g.total_weight;
   double dnc  = (double)dnodecomm;
   
-  return (dnc - totc*degc/m2) ;
+  return (dnc - totc*degc/m2);
 }
 
 

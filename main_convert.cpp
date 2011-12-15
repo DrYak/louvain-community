@@ -20,14 +20,17 @@ using namespace std;
 
 char *infile   = NULL;
 char *outfile  = NULL;
+char *outfile_w  = NULL;
 int type       = UNWEIGHTED;
+bool do_renumber = false;
 
 void
-usage(char *prog_name, char *more) {
+usage(char *prog_name, const char *more) {
   cerr << more;
-  cerr << "usage: " << prog_name << " -i input_file -o outfile [options]" << endl << endl;
+  cerr << "usage: " << prog_name << " -i input_file -o outfile [-r] [-w outfile_weight]" << endl << endl;
   cerr << "read the graph and convert it to binary format." << endl;
-  cerr << "-w\tread the graph as a weighted one." << endl;
+  cerr << "-r\tnodes are renumbered from 0 to nb_nodes-1 (the order is kept)." << endl;
+  cerr << "-w filename\tread the graph as a weighted one and writes the weights in a separate file." << endl;
   cerr << "-h\tshow this usage message." << endl;
   exit(0);
 }
@@ -51,6 +54,11 @@ parse_args(int argc, char **argv) {
 	break;
       case 'w' :
 	type = WEIGHTED;
+        outfile_w = argv[i+1];
+	i++;
+	break;
+      case 'r' :
+	do_renumber=true;
 	break;
       default:
 	usage(argv[0], "Unknown option\n");
@@ -70,6 +78,10 @@ main(int argc, char **argv) {
   Graph g(infile, type);
 
   g.clean(type);
-  g.renumber(type);
-  g.display_binary(outfile, type);
+
+  if (do_renumber)
+    g.renumber(type);
+
+  g.display_binary(outfile, outfile_w, type);
+
 }

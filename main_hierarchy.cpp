@@ -30,7 +30,7 @@ int display_level = -1;
 char *filename = NULL;
 
 void
-usage(char *prog_name, char *more) {
+usage(char *prog_name, const char *more) {
   cerr << more;
   cerr << "usage: " << prog_name << " input_file [options]" << endl << endl;
   cerr << "input_file: read the community tree from this file." << endl;

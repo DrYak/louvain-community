@@ -18,9 +18,13 @@
 
 using namespace std;
 
-Community::Community(char * filename, int type, int nbp, double minm) {
-  g = Graph(filename, type);
+Community::Community(char * filename, char * filename_w, int type, int nbp, double minm) {
+  g = Graph(filename, filename_w, type);
   size = g.nb_nodes;
+
+  neigh_weight.resize(size,-1);
+  neigh_pos.resize(size);
+  neigh_last=0;
 
   n2c.resize(size);
   in.resize(size);
@@ -28,8 +32,8 @@ Community::Community(char * filename, int type, int nbp, double minm) {
 
   for (int i=0 ; i<size ; i++) {
     n2c[i] = i;
-    in[i]  = g.nb_selfloops(i);
     tot[i] = g.weighted_degree(i);
+    in[i]  = g.nb_selfloops(i);
   }
 
   nb_pass = nbp;
@@ -39,6 +43,10 @@ Community::Community(char * filename, int type, int nbp, double minm) {
 Community::Community(Graph gc, int nbp, double minm) {
   g = gc;
   size = g.nb_nodes;
+
+  neigh_weight.resize(size,-1);
+  neigh_pos.resize(size);
+  neigh_last=0;
 
   n2c.resize(size);
   in.resize(size);
@@ -55,11 +63,60 @@ Community::Community(Graph gc, int nbp, double minm) {
 }
 
 void
+Community::init_partition(char * filename) {
+  ifstream finput;
+  finput.open(filename,fstream::in);
+
+  // read partition
+  while (!finput.eof()) {
+    unsigned int node, comm;
+    finput >> node >> comm;
+    
+    if (finput) {
+      int old_comm = n2c[node];
+      neigh_comm(node);
+
+      remove(node, old_comm, neigh_weight[old_comm]);
+
+      unsigned int i=0;
+      for ( i=0 ; i<neigh_last ; i++) {
+	unsigned int best_comm     = neigh_pos[i];
+	float best_nblinks  = neigh_weight[neigh_pos[i]];
+	if (best_comm==comm) {
+	  insert(node, best_comm, best_nblinks);
+	  break;
+	}
+      }
+      if (i==neigh_last)
+	insert(node, comm, 0);
+    }
+  }
+  finput.close();
+}
+
+// inline void
+// Community::remove(int node, int comm, double dnodecomm) {
+//   assert(node>=0 && node<size);
+
+//   tot[comm] -= g.weighted_degree(node);
+//   in[comm]  -= 2*dnodecomm + g.nb_selfloops(node);
+//   n2c[node]  = -1;
+// }
+
+// inline void
+// Community::insert(int node, int comm, double dnodecomm) {
+//   assert(node>=0 && node<size);
+
+//   tot[comm] += g.weighted_degree(node);
+//   in[comm]  += 2*dnodecomm + g.nb_selfloops(node);
+//   n2c[node]=comm;
+// }
+
+void
 Community::display() {
-  cerr << endl << "<" ;
   for (int i=0 ; i<size ; i++)
     cerr << " " << i << "/" << n2c[i] << "/" << in[i] << "/" << tot[i] ;
-  cerr << ">" << endl;
+  cerr << endl;
 }
 
 
@@ -76,33 +133,34 @@ Community::modularity() {
   return q;
 }
 
+void
+Community::neigh_comm(unsigned int node) {
+  for (unsigned int i=0 ; i<neigh_last ; i++)
+    neigh_weight[neigh_pos[i]]=-1;
+  neigh_last=0;
 
-map<int,int>
-Community::neigh_comm(int node) {
-  map<int,int> res;
-  pair<int *,int *> p = g.neighbors(node);
+  pair<vector<unsigned int>::iterator, vector<float>::iterator> p = g.neighbors(node);
 
-  int deg = g.nb_neighbors(node);
+  unsigned int deg = g.nb_neighbors(node);
 
-  res.insert(make_pair(n2c[node],0));
+  neigh_pos[0]=n2c[node];
+  neigh_weight[neigh_pos[0]]=0;
+  neigh_last=1;
 
-  for (int i=0 ; i<deg ; i++) {
-    int neigh        = *(p.first+i);
-    int neigh_comm   = n2c[neigh];
-    int neigh_weight = (g.weights==NULL)?1:*(p.second+i);
+  for (unsigned int i=0 ; i<deg ; i++) {
+    unsigned int neigh        = *(p.first+i);
+    unsigned int neigh_comm   = n2c[neigh];
+    double neigh_w = (g.weights.size()==0)?1.:*(p.second+i);
     
     if (neigh!=node) {
-      map<int,int>::iterator it = res.find(neigh_comm);
-      if (it!=res.end())
-	it->second+=neigh_weight;
-      else
-	res.insert(make_pair(neigh_comm,neigh_weight));
+      if (neigh_weight[neigh_comm]==-1) {
+	neigh_weight[neigh_comm]=0.;
+	neigh_pos[neigh_last++]=neigh_comm;
+      }
+      neigh_weight[neigh_comm]+=neigh_w;
     }
   }
-  
-  return res;
 }
-
 
 void
 Community::partition2graph() {
@@ -118,7 +176,7 @@ Community::partition2graph() {
 
 
   for (int i=0 ; i<size ; i++) {
-    pair<int *,int *> p = g.neighbors(i);
+    pair<vector<unsigned int>::iterator, vector<float>::iterator> p = g.neighbors(i);
 
     int deg = g.nb_neighbors(i);
     for (int j=0 ; j<deg ; j++) {
@@ -144,10 +202,10 @@ Community::display_partition() {
     cout << i << " " << renumber[n2c[i]] << endl;
 }
 
-// This function has to be revisited
-// malloc is dirty
+
 Graph
 Community::partition2graph_binary() {
+  // Renumber communities
   vector<int> renumber(size, -1);
   for (int node=0 ; node<size ; node++) {
     renumber[n2c[node]]++;
@@ -164,27 +222,24 @@ Community::partition2graph_binary() {
     comm_nodes[renumber[n2c[node]]].push_back(node);
   }
 
-  // unweigthed to weighted
+  // Compute weighted graph
   Graph g2;
   g2.nb_nodes = comm_nodes.size();
-  g2.degrees  = (int *)malloc(comm_nodes.size()*4);
-  g2.links    = (int *)malloc((long)10000000*8);
-  g2.weights  = (int *)malloc((long)10000000*8);
+  g2.degrees.resize(comm_nodes.size());
 
-  long where = 0;
   int comm_deg = comm_nodes.size();
   for (int comm=0 ; comm<comm_deg ; comm++) {
-    map<int,int> m;
-    map<int,int>::iterator it;
+    map<int,float> m;
+    map<int,float>::iterator it;
 
     int comm_size = comm_nodes[comm].size();
     for (int node=0 ; node<comm_size ; node++) {
-      pair<int *,int *> p = g.neighbors(comm_nodes[comm][node]);
+      pair<vector<unsigned int>::iterator, vector<float>::iterator> p = g.neighbors(comm_nodes[comm][node]);
       int deg = g.nb_neighbors(comm_nodes[comm][node]);
       for (int i=0 ; i<deg ; i++) {
 	int neigh        = *(p.first+i);
 	int neigh_comm   = renumber[n2c[neigh]];
-	int neigh_weight = (g.weights==NULL)?1:*(p.second+i);
+	double neigh_weight = (g.weights.size()==0)?1.:*(p.second+i);
 
 	it = m.find(neigh_comm);
 	if (it==m.end())
@@ -193,35 +248,28 @@ Community::partition2graph_binary() {
 	  it->second+=neigh_weight;
       }
     }
-
     g2.degrees[comm]=(comm==0)?m.size():g2.degrees[comm-1]+m.size();
     g2.nb_links+=m.size();
 
+    
     for (it = m.begin() ; it!=m.end() ; it++) {
       g2.total_weight  += it->second;
-      g2.links[where]   = it->first;
-      g2.weights[where] = it->second;
-      where++;
+      g2.links.push_back(it->first);
+      g2.weights.push_back(it->second);
     }
   }
-
-  realloc(g.links, (long)g2.nb_links*4);
-  realloc(g.weights, (long)g2.nb_links*4);
 
   return g2;
 }
 
-double
+
+bool
 Community::one_level() {
-  bool improvement = false;
+  bool improvement=false ;
+  int nb_moves;
   int nb_pass_done = 0;
   double new_mod   = modularity();
   double cur_mod   = new_mod;
-
-  // repeat while 
-  //   there is an improvement of modularity
-  //   or there is an improvement of modularity greater than a given epsilon 
-  //   or a predefined number of pass have been done
 
   vector<int> random_order(size);
   for (int i=0 ; i<size ; i++)
@@ -233,52 +281,61 @@ Community::one_level() {
     random_order[rand_pos] = tmp;
   }
 
+  // repeat while 
+  //   there is an improvement of modularity
+  //   or there is an improvement of modularity greater than a given epsilon 
+  //   or a predefined number of pass have been done
   do {
     cur_mod = new_mod;
-    improvement = false;
+    nb_moves = 0;
     nb_pass_done++;
 
     // for each node: remove the node from its community and insert it in the best community
     for (int node_tmp=0 ; node_tmp<size ; node_tmp++) {
-      int node = node_tmp;
-//      int node = random_order[node_tmp];
-//      if (node%1000000==0) {fprintf(stderr,"%d ",node); fflush(stderr);}
+//      int node = node_tmp;
+      int node = random_order[node_tmp];
       int node_comm     = n2c[node];
+      double w_degree = g.weighted_degree(node);
 
       // computation of all neighboring communities of current node
-      map<int,int> ncomm   = neigh_comm(node);
-
+      neigh_comm(node);
       // remove node from its current community
-      remove(node, node_comm, ncomm.find(node_comm)->second);
+      remove(node, node_comm, neigh_weight[node_comm]);
 
       // compute the nearest community for node
       // default choice for future insertion is the former community
       int best_comm        = node_comm;
-      int best_nblinks     = 0;//ncomm.find(node_comm)->second;
-      double best_increase = 0.;//modularity_gain(node, best_comm, best_nblinks);
-      for (map<int,int>::iterator it=ncomm.begin() ; it!=ncomm.end() ; it++) {
-        double increase = modularity_gain(node, it->first, it->second);
+      double best_nblinks  = 0.;
+      double best_increase = 0.;
+      for (unsigned int i=0 ; i<neigh_last ; i++) {
+        double increase = modularity_gain(node, neigh_pos[i], neigh_weight[neigh_pos[i]], w_degree);
         if (increase>best_increase) {
-          best_comm     = it->first;
-          best_nblinks  = it->second;
+          best_comm     = neigh_pos[i];
+          best_nblinks  = neigh_weight[neigh_pos[i]];
           best_increase = increase;
         }
       }
 
       // insert node in the nearest community
-      //      cerr << "insert " << node << " in " << best_comm << " " << best_increase << endl;
       insert(node, best_comm, best_nblinks);
      
       if (best_comm!=node_comm)
-        improvement=true;
+        nb_moves++;
+    }
+
+    double total_tot=0;
+    double total_in=0;
+    for (unsigned int i=0 ; i<tot.size() ;i++) {
+      total_tot+=tot[i];
+      total_in+=in[i];
     }
 
     new_mod = modularity();
-    cerr << "pass number " << nb_pass_done << " of " << nb_pass 
-         << " : " << new_mod << " " << cur_mod << endl;
+    if (nb_moves>0)
+      improvement=true;
+    
+  } while (nb_moves>0 && new_mod-cur_mod>min_modularity);
 
-  } while (improvement && new_mod-cur_mod>min_modularity && nb_pass_done!=nb_pass);
-
-  return new_mod;
+  return improvement;
 }
 

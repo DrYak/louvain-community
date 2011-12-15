@@ -34,14 +34,14 @@ using namespace std;
 
 class Graph {
  public:
-  vector<vector<pair<int,int> > > links;
+  vector<vector<pair<int,float> > > links;
   
   Graph (char *filename, int type);
   
   void clean(int type);
   void renumber(int type);
   void display(int type);
-  void display_binary(char *filename, int type);
+  void display_binary(char *filename, char *filename_w, int type);
 };
 
 #endif // GRAPH_H

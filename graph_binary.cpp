@@ -15,7 +15,9 @@
 // see readme.txt for more details
 
 #include <sys/mman.h>
+#include <fstream>
 #include "graph_binary.h"
+#include "math.h"
 
 Graph::Graph() {
   nb_nodes     = 0;
@@ -23,183 +25,119 @@ Graph::Graph() {
   total_weight = 0;
 }
 
-Graph::Graph(char *filename, int type) {
+Graph::Graph(char *filename, char *filename_w, int type) {
   ifstream finput;
   finput.open(filename,fstream::in | fstream::binary);
 
-  // read number of nodes on 4 bytes
+  // Read number of nodes on 4 bytes
   finput.read((char *)&nb_nodes, 4);
+  assert(finput.rdstate() == ios::goodbit);
 
-  // read cumulative degree sequence: 4 bytes for each node
+  // Read cumulative degree sequence: 8 bytes for each node
   // cum_degree[0]=degree(0); cum_degree[1]=degree(0)+degree(1), etc.
+  degrees.resize(nb_nodes);
+  finput.read((char *)&degrees[0], nb_nodes*8);
 
-  degrees = (int *)malloc((long)nb_nodes*4);
-  finput.read((char *)degrees, (long)nb_nodes*4);
-
-  // read links: 4 bytes for each link (each link is counted twice)
-  nb_links=degrees[nb_nodes-1]/2;
-  links = (int *)malloc((long)nb_links*8);
-  finput.read((char *)links, (long)nb_links*8);  
-  cerr << "total : " << nb_links << endl;
+  // Read links: 4 bytes for each link (each link is counted twice)
+  nb_links=degrees[nb_nodes-1];
+  links.resize(nb_links);
+  finput.read((char *)(&links[0]), (long)nb_links*8);  
 
   // IF WEIGHTED : read weights: 4 bytes for each link (each link is counted twice)
+  weights.resize(0);
+  total_weight=0;
   if (type==WEIGHTED) {
-    weights = (int *)malloc((long)nb_links*8);
-    finput.read((char *)weights, (long)nb_links*8);  
-    total_weight=0;
-    for (int i = 0 ; i<nb_links*2 ; i++) {
-      total_weight += weights[i];
-    }
-  } else {
-    weights = NULL;
-    total_weight = 2*nb_links;
+    ifstream finput_w;
+    finput_w.open(filename_w,fstream::in | fstream::binary);
+    weights.resize(nb_links);
+    finput_w.read((char *)&weights[0], (long)nb_links*4);  
+  }    
+
+  // Compute total weight
+  for (unsigned int i=0 ; i<nb_nodes ; i++) {
+    total_weight += (double)weighted_degree(i);
   }
 }
 
-// generates a random graph using the benchmark approach
-Graph::Graph(int n1, int k1, int n2, int k2, int n3, int k3) {
-  srand(time(NULL));
-  nb_nodes = n1*n2*n3;
-
-  vector<vector<int> > gr(nb_nodes);
-  for (int i=0 ; i<nb_nodes ; i++)
-    gr[i].resize(nb_nodes,0);
-
-//  cerr << (k1*1.)/(n1*1.) << " " 
-//       << (k2*1.)/(n1*n2*1.) << " " 
-//       << (k3*1.)/(n1*n2*n3*1.) << endl;
-
-  nb_links = 0;
-  for (int i=0 ; i<nb_nodes ; i++)
-    for (int j=i+1 ; j<nb_nodes ; j++) {
-      double v = rand()*1./RAND_MAX;
-      if (i/n1==j/n1) { // i and j in the same subgroup
-//	cout << i << " " << j << " 1 : " << v << " " << (k1*1.)/(n1-1.) ;
-	if (v<=(k1*1.)/(n1-1.)) {
-	  gr[i][j]=gr[j][i]=1;
-	  nb_links++;
-//	  cout << " : ok" ;
-	}
-//	cout << endl;
-      } else if (i/(n1*n2)==j/(n1*n2)) { // i and j in the same group
-//	cout << i << " " << j << " 2 : " << v << " " << (k2*1.)/(n1*(n2-1.)) ;
-	if (v<=(k2*1.)/(n1*(n2-1.))) {
-	  gr[i][j]=gr[j][i]=1;
-	  nb_links++;
-//	  cout << " : ok" ;
-	}
-//	cout << endl;
-      } else { // i and j in different groups
-//	cout << i << " " << j << " 3 : " << v << " " << (k3*1.)/(n1*n2*(n3-1.)) ;
-	if (v<=(k3*1.)/(n1*n2*(n3-1.))) {
-	  gr[i][j]=gr[j][i]=1;
-	  nb_links++;
-//	  cout << " : ok" ;
-	}
-//	cout << endl;
-      }
-    }
-
-//  cerr << nb_links << endl;
-  
-  total_weight = 2*nb_links;
-  weights      = NULL;
-
-  degrees = (int *)malloc((long)nb_nodes*4);
-  for (int i=0 ; i<nb_nodes ; i++) {
-    int d = 0;
-    for (int j=0 ; j<nb_nodes ; j++)
-      d+=gr[i][j];
-    degrees[i]=d;
-  }
-  for (int i=1 ; i<nb_nodes ; i++)
-    degrees[i]+=degrees[i-1];
-
-  links = (int *)malloc((long)nb_links*8);
-  int pos=0;
-  for (int i=0 ; i<nb_nodes ; i++)
-    for (int j=0 ; j<nb_nodes ; j++)
-      if (gr[i][j]==1)
-	links[pos++]=j;
-
-//  for (int i=0 ; i<nb_nodes ; i++)
-//    cerr << degrees[i] << " " ;
-//  cerr << endl;
-}
-
-// generates a random graph using the benchmark approach
-Graph::Graph(int n1, int k1, int n2, int k2) {
-  srand(getpid());
-
-//  srand(time(NULL));
-  nb_nodes = n1*n2;
-
-  vector<vector<int> > gr(nb_nodes);
-  for (int i=0 ; i<nb_nodes ; i++)
-    gr[i].resize(nb_nodes,0);
-
-  nb_links = 0;
-  for (int i=0 ; i<nb_nodes ; i++)
-    for (int j=i+1 ; j<nb_nodes ; j++) {
-      double v = rand()*1./RAND_MAX;
-      if (i/n1==j/n1) { // i and j in the same subgroup
-	if (v<=(k1*1.)/(n1-1.)) {
-	  gr[i][j]=gr[j][i]=1;
-	  nb_links++;
-	}
-      } else { // i and j in different groups
-	if (v<=(k2*1.)/(n1*(n2-1.))) {
-	  gr[i][j]=gr[j][i]=1;
-	  nb_links++;
-	}
-      }
-    }
-
-  total_weight = 2*nb_links;
-  weights      = NULL;
-
-  degrees = (int *)malloc((long)nb_nodes*4);
-  for (int i=0 ; i<nb_nodes ; i++) {
-    int d = 0;
-    for (int j=0 ; j<nb_nodes ; j++)
-      d+=gr[i][j];
-    degrees[i]=d;
-  }
-  for (int i=1 ; i<nb_nodes ; i++)
-    degrees[i]+=degrees[i-1];
-
-  links = (int *)malloc((long)nb_links*8);
-  int pos=0;
-  for (int i=0 ; i<nb_nodes ; i++)
-    for (int j=0 ; j<nb_nodes ; j++)
-      if (gr[i][j]==1)
-	links[pos++]=j;
-}
-
-Graph::Graph(int n, int m, int t, int *d, int *l, int *w) {
-  nb_nodes     = n;
+Graph::Graph(int n, int m, double t, int *d, int *l, float *w) {
+/*  nb_nodes     = n;
   nb_links     = m;
   total_weight = t;
   degrees      = d;
   links        = l;
-  weights      = w;
+  weights      = w;*/
 }
 
 
 void
 Graph::display() {
-  for (int node=0 ; node<nb_nodes ; node++) {
-    pair<int *,int *> p = neighbors(node);
-    for (int i=0 ; i<nb_neighbors(node) ; i++) {
-      if (weights!=NULL)
-	cout << node << " " << *(p.first+i) << " " << *(p.second+i) << endl;
-      else {
-		cout << (node+1) << " " << (*(p.first+i)+1) << endl;
-	//	cout << (node) << " " << (*(p.first+i)) << endl;
+/*  for (unsigned int node=0 ; node<nb_nodes ; node++) {
+    pair<vector<unsigned int>::iterator, vector<float>::iterator > p = neighbors(node);
+    for (unsigned int i=0 ; i<nb_neighbors(node) ; i++) {
+      if (node<=*(p.first+i)) {
+	if (weights.size()!=0)
+	  cout << node << " " << *(p.first+i) << " " << *(p.second+i) << endl;
+	else
+	  cout << node << " " << *(p.first+i) << endl;
+      }
+    }   
+  }*/
+  for (unsigned int node=0 ; node<nb_nodes ; node++) {
+    pair<vector<unsigned int>::iterator, vector<float>::iterator > p = neighbors(node);
+    cout << node << ":" ;
+    for (unsigned int i=0 ; i<nb_neighbors(node) ; i++) {
+      if (true) {
+	if (weights.size()!=0)
+	  cout << " (" << *(p.first+i) << " " << *(p.second+i) << ")";
+	else
+	  cout << " " << *(p.first+i);
+      }
+    }
+    cout << endl;
+  }
+}
+
+void
+Graph::display_reverse() {
+  for (unsigned int node=0 ; node<nb_nodes ; node++) {
+    pair<vector<unsigned int>::iterator, vector<float>::iterator > p = neighbors(node);
+    for (unsigned int i=0 ; i<nb_neighbors(node) ; i++) {
+      if (node>*(p.first+i)) {
+	if (weights.size()!=0)
+	  cout << *(p.first+i) << " " << node << " " << *(p.second+i) << endl;
+	else
+	  cout << *(p.first+i) << " " << node << endl;
       }
     }   
   }
 }
+
+
+bool
+Graph::check_symmetry() {
+  int error=0;
+  for (unsigned int node=0 ; node<nb_nodes ; node++) {
+    pair<vector<unsigned int>::iterator, vector<float>::iterator > p = neighbors(node);
+    for (unsigned int i=0 ; i<nb_neighbors(node) ; i++) {
+      unsigned int neigh = *(p.first+i);
+      float weight = *(p.second+i);
+      
+      pair<vector<unsigned int>::iterator, vector<float>::iterator > p_neigh = neighbors(neigh);
+      for (unsigned int j=0 ; j<nb_neighbors(neigh) ; j++) {
+	unsigned int neigh_neigh = *(p_neigh.first+j);
+	float neigh_weight = *(p_neigh.second+j);
+
+	if (node==neigh_neigh && weight!=neigh_weight) {
+	  cout << node << " " << neigh << " " << weight << " " << neigh_weight << endl;
+	  if (error++==10)
+	    exit(0);
+	}
+      }
+    }
+  }
+  return (error==0);
+}
+
 
 void
 Graph::display_binary(char *outfile) {
@@ -207,6 +145,6 @@ Graph::display_binary(char *outfile) {
   foutput.open(outfile ,fstream::out | fstream::binary);
 
   foutput.write((char *)(&nb_nodes),4);
-  foutput.write((char *)(degrees),4*nb_nodes);
-  foutput.write((char *)(links),8*nb_links);
+  foutput.write((char *)(&degrees[0]),4*nb_nodes);
+  foutput.write((char *)(&links[0]),8*nb_links);
 }
