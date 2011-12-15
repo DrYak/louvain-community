@@ -25,21 +25,24 @@ Graph::Graph(char *filename, int type) {
   int nb_links=0;
 
   while (!finput.eof()) {
-    if (nb_links%10000000==0) {cerr << "."; fflush(stderr);}
+    unsigned int src, dest;
+    double weight=1.;
 
-    unsigned int src, dest, weight=1;
-
-    if (type==WEIGHTED)
+    if (type==WEIGHTED) {
       finput >> src >> dest >> weight;
-    else
+    } else {
       finput >> src >> dest;
+    }
     
     if (finput) {
-      if (links.size()<=max(src,dest)+1)
+      if (links.size()<=max(src,dest)+1) {
         links.resize(max(src,dest)+1);
+      }
       
       links[src].push_back(make_pair(dest,weight));
-      links[dest].push_back(make_pair(src,weight));
+      if (src!=dest)
+        links[dest].push_back(make_pair(src,weight));
+
       nb_links++;
     }
   }
@@ -79,9 +82,8 @@ Graph::renumber(int type) {
 void
 Graph::clean(int type) {
   for (unsigned int i=0 ; i<links.size() ; i++) {
-    if (i%10000000==0) fprintf(stderr,".");fflush(stderr);      
-    map<int,int> m;
-    map<int,int>::iterator it;
+    map<int, float> m;
+    map<int, float>::iterator it;
 
     for (unsigned int j=0 ; j<links[i].size() ; j++) {
       it = m.find(links[i][j].first);
@@ -90,8 +92,8 @@ Graph::clean(int type) {
       else if (type==WEIGHTED)
       	it->second+=links[i][j].second;
     }
-
-    vector<pair<int,int> > v;
+    
+    vector<pair<int,float> > v;
     for (it = m.begin() ; it!=m.end() ; it++)
       v.push_back(*it);
     links[i].clear();
@@ -101,12 +103,10 @@ Graph::clean(int type) {
 
 void
 Graph::display(int type) {
-  cout << "Graph: " << endl;
-
   for (unsigned int i=0 ; i<links.size() ; i++) {
     for (unsigned int j=0 ; j<links[i].size() ; j++) {
       int dest   = links[i][j].first;
-      int weight = links[i][j].second;
+      float weight = links[i][j].second;
       if (type==WEIGHTED)
 	cout << i << " " << dest << " " << weight << endl;
       else
@@ -116,32 +116,42 @@ Graph::display(int type) {
 }
 
 void
-Graph::display_binary(char *filename, int type) {
+Graph::display_binary(char *filename, char *filename_w, int type) {
   ofstream foutput;
-  foutput.open(filename,fstream::out | fstream::binary);
+  foutput.open(filename, fstream::out | fstream::binary);
 
-  int s = links.size();
+  unsigned int s = links.size();
 
+  // outputs number of nodes
   foutput.write((char *)(&s),4);
 
-  int tot=0;
-  for (unsigned int i=0 ; i<links.size() ; i++) {
-    tot+=links[i].size();
-    foutput.write((char *)(&tot),4);
+  // outputs cumulative degree sequence
+  long tot=0;
+  for (unsigned int i=0 ; i<s ; i++) {
+    tot+=(long)links[i].size();
+    foutput.write((char *)(&tot),8);
   }
 
-  for (unsigned int i=0 ; i<links.size() ; i++)
+  // outputs links
+  for (unsigned int i=0 ; i<s ; i++) {
     for (unsigned int j=0 ; j<links[i].size() ; j++) {
       int dest = links[i][j].first;
       foutput.write((char *)(&dest),4);
     }
+  }
+  foutput.close();
+
+  // outputs weights in a separate file
   if (type==WEIGHTED) {
-    for (unsigned int i=0 ; i<links.size() ; i++) {
+    ofstream foutput_w;
+    foutput_w.open(filename_w,fstream::out | fstream::binary);
+    for (unsigned int i=0 ; i<s ; i++) {
       for (unsigned int j=0 ; j<links[i].size() ; j++) {
-	int weight = links[i][j].second;
-	foutput.write((char *)(&weight),4);
+	float weight = links[i][j].second;
+	foutput_w.write((char *)(&weight),4);
       }
     }
+    foutput_w.close();
   }
 }
 
