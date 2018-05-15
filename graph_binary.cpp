@@ -50,11 +50,15 @@ Graph::Graph(char *filename, char *filename_w, int type) {
   // cum_degree[0]=degree(0); cum_degree[1]=degree(0)+degree(1), etc.
   degrees.resize(nb_nodes);
   finput.read((char *)&degrees[0], nb_nodes*8);
+  assert(finput.rdstate() == ios::goodbit);
 
   // Read links: 4 bytes for each link (each link is counted twice)
   nb_links=degrees[nb_nodes-1];
-  links.resize(nb_links);
-  finput.read((char *)(&links[0]), (long)nb_links*8);  
+  links.resize(nb_links*2);
+  finput.read((char *)(&links[0]), (long)nb_links*4*2);  
+  //  assert(finput.rdstate() == ios::goodbit);
+  if (finput.rdstate() != ios::goodbit)
+    std::cerr << "input underflow :" << finput.gcount() << " characters read, " << (finput.gcount() / sizeof(links[0])) << " entries " << std::endl;
 
   // IF WEIGHTED : read weights: 4 bytes for each link (each link is counted twice)
   weights.resize(0);
@@ -64,6 +68,7 @@ Graph::Graph(char *filename, char *filename_w, int type) {
     finput_w.open(filename_w,fstream::in | fstream::binary);
     weights.resize(nb_links);
     finput_w.read((char *)&weights[0], (long)nb_links*4);  
+    assert(finput_w.rdstate() == ios::goodbit);
   }    
 
   // Compute total weight
