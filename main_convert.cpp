@@ -34,7 +34,7 @@ using namespace std;
 char *infile   = NULL;
 char *outfile  = NULL;
 char *outfile_w  = NULL;
-int type       = UNWEIGHTED;
+uint32_t type       = UNWEIGHTED;
 bool do_renumber = false;
 
 void
