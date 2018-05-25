@@ -157,20 +157,20 @@ Graph::display_binary(char *filename, char *filename_w, uint32_t type) {
   uint32_t s = links.size();
 
   // outputs number of nodes
-  foutput.write((char *)(&s),4);
+  foutput.write((char *)(&s),sizeof(s));
 
   // outputs cumulative degree sequence
   long tot=0;
   for (uint32_t i=0 ; i<s ; i++) {
     tot+=(long)links[i].size();
-    foutput.write((char *)(&tot),8);
+    foutput.write((char *)(&tot),sizeof(tot));
   }
 
   // outputs links
   for (uint32_t i=0 ; i<s ; i++) {
     for (uint32_t j=0 ; j<links[i].size() ; j++) {
       uint32_t dest = links[i][j].first;
-      foutput.write((char *)(&dest),4);
+      foutput.write((char *)(&dest),sizeof(dest));
     }
   }
   foutput.close();
@@ -182,7 +182,7 @@ Graph::display_binary(char *filename, char *filename_w, uint32_t type) {
     for (uint32_t i=0 ; i<s ; i++) {
       for (uint32_t j=0 ; j<links[i].size() ; j++) {
 	float weight = links[i][j].second;
-	foutput_w.write((char *)(&weight),4);
+	foutput_w.write((char *)(&weight),sizeof(weight));
       }
     }
     foutput_w.close();
