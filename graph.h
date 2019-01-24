@@ -39,6 +39,8 @@
 #include <map>
 #include <set>
 #include <algorithm>
+#include <cstdint>
+#include <cassert>
 
 #define WEIGHTED   0
 #define UNWEIGHTED 1
@@ -47,14 +49,14 @@ using namespace std;
 
 class Graph {
  public:
-  vector<vector<pair<int,float> > > links;
+  vector<vector<pair<uint32_t,float> > > links;
   
-  Graph (char *filename, int type);
+  Graph (char *filename, uint32_t type);
   
-  void clean(int type);
-  void renumber(int type);
-  void display(int type);
-  void display_binary(char *filename, char *filename_w, int type);
+  void clean(uint32_t type);
+  void renumber(uint32_t type);
+  void display(uint32_t type);
+  void display_binary(char *filename, char *filename_w, uint32_t type);
 };
 
 #endif // GRAPH_H

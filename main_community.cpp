@@ -36,7 +36,6 @@
 #include <vector>
 #include <algorithm>
 #include <unistd.h> // getpid
-
 #include "graph_binary.h"
 #include "community.h"
 
