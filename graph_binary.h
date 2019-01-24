@@ -30,10 +30,13 @@
 #ifndef GRAPH_H
 #define GRAPH_H
 
+#if !defined(__MACH__)
+#include <malloc.h>
+#endif
+
 #include <stdlib.h>
 #include <stdio.h>
 #include <assert.h>
-#include <malloc.h>
 #include <iostream>
 #include <iomanip>
 #include <fstream>

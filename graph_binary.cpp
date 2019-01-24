@@ -43,7 +43,7 @@ Graph::Graph(char *filename, char *filename_w, int type) {
   finput.open(filename,fstream::in | fstream::binary);
 
   // Read number of nodes on 4 bytes
-  finput.read((char *)&nb_nodes, 4);
+  finput.read((char *)&nb_nodes, sizeof(nb_nodes));
   assert(finput.rdstate() == ios::goodbit);
 
   // Read cumulative degree sequence: 8 bytes for each node
